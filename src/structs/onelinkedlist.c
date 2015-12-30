@@ -23,7 +23,7 @@ typedef struct PyOneLinkedList {
 PyObject* list_to_pylist(PyOneLinkedList *self) {
     OneLinkedList *p = self->first;
     PyObject *pylist = PyList_New((Py_ssize_t)0);
-    while((PyObject*)p != Py_None) {
+    while(p != NULL) {
         PyList_Append(pylist, p->item);
         p = p->next;
     }
@@ -33,7 +33,7 @@ PyObject* list_to_pylist(PyOneLinkedList *self) {
 Py_ssize_t list_get_size(PyOneLinkedList *self) {
     OneLinkedList *p = self->first;
     Py_ssize_t size = 0;
-    while((PyObject*)p != Py_None) {
+    while(p != NULL) {
         ++size;
         p = p->next;
     }
@@ -52,7 +52,7 @@ void list_push(PyOneLinkedList *self, PyObject *item) {
 
 OneLinkedList* list_pop(PyOneLinkedList *self) {
     OneLinkedList *l = self->first;
-    self->first = l->next;
+    if(l != NULL) self->first = l->next;
     return l;
 }
 
@@ -61,7 +61,7 @@ OneLinkedList* list_get(PyOneLinkedList *self, Py_ssize_t pos) {
     OneLinkedList *l = self->first;
     int i;
     for(i=0; i != pos; ++i) {
-        if((PyObject*)l == Py_None) break;
+        if(l == NULL) break;
         l = l->next;
     }
     return l;
@@ -70,7 +70,7 @@ OneLinkedList* list_get(PyOneLinkedList *self, Py_ssize_t pos) {
 void list_insert(PyOneLinkedList *self, PyObject *item, Py_ssize_t pos) {
     if(pos == 0) return list_push(self, item);
     OneLinkedList* prev = list_get(self, pos-1);
-    if((PyObject*)prev != Py_None) {
+    if(prev != NULL) {
         OneLinkedList *elem = (OneLinkedList*)PyMem_Malloc(sizeof(OneLinkedList));
         elem->item = item;
         elem->next = prev->next;
@@ -78,6 +78,23 @@ void list_insert(PyOneLinkedList *self, PyObject *item, Py_ssize_t pos) {
     }
     // else ?
 }
+
+
+void list_reverse(PyOneLinkedList *self) {
+    if(self == NULL) return;
+    OneLinkedList *prev, *curr, *tmp;
+    prev = NULL;
+    curr = self->first;
+    while(curr != NULL) {
+        tmp = curr->next;
+        curr->next = prev;
+        prev = curr;
+        curr = tmp;
+    }
+    self->first = prev;
+}
+
+
 
 // OneLinkedList* list_take(PyOneLinkedList *self, Py_ssize_t pos) {
 //     if(pos == 0) return list_pop(self);
@@ -98,20 +115,27 @@ void list_insert(PyOneLinkedList *self, PyObject *item, Py_ssize_t pos) {
 
 
 static PyObject*
+PyOneLinkedList_Reverse(PyOneLinkedList *self) {
+    list_reverse(self);
+    return (PyObject*)self;
+}
+
+
+static PyObject*
 PyOneLinkedList_Get(PyOneLinkedList *self, PyObject *args) {
     PyObject *num_obj;
     if(!PyArg_ParseTuple(args, "O", &num_obj)) return NULL;
     Py_ssize_t num = PyInt_AsSsize_t(num_obj);
     if(num < 0) return NULL; // add ex
     OneLinkedList *l = list_get(self, num);
-    if((PyObject*)l == Py_None) Py_RETURN_NONE;
+    if(l == NULL) Py_RETURN_NONE;
     return l->item;
 }
 
 static PyObject*
 PyOneLinkedList_Pop(PyOneLinkedList *self) {
     OneLinkedList *l = list_pop(self);
-    if((PyObject*)l == Py_None) Py_RETURN_NONE;
+    if(l == NULL) Py_RETURN_NONE;
     return l->item;
 }
 
@@ -126,7 +150,7 @@ PyOneLinkedList_Push(PyOneLinkedList *self, PyObject *args) {
 static PyObject*
 PyOneLinkedList_Insert(PyOneLinkedList *self, PyObject *args) {
     PyObject *new_item, *pos_obj;
-    if(!PyArg_ParseTuple(args, "OO", &new_item, &pos_obj)) return NULL;
+    if(!PyArg_ParseTuple(args, "OO", &pos_obj, &new_item)) return NULL;
     Py_ssize_t pos = PyInt_AsSsize_t(pos_obj);
     if(pos < 0) return NULL; // add ex
     list_insert(self, new_item, pos);
@@ -143,7 +167,7 @@ PyOneLinkedList_Repr(PyOneLinkedList *self) {
     PyObject *separator = PyString_FromString(", ");
     OneLinkedList *p = self->first;
     PyObject *seq = PyList_New((Py_ssize_t)0);
-    while((PyObject*)p != Py_None) {
+    while(p != NULL) {
         PyList_Append(seq, PyObject_Repr(p->item));
         p = p->next;
     }
@@ -158,10 +182,15 @@ PyOneLinkedList_New(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)self;
 }
 
+static PyObject*
+PyOneLinkedList_Len(PyOneLinkedList *self) {
+    return PyLong_FromSsize_t(list_get_size(self));
+}
+
 static void
 PyOneLinkedList_Dealloc(PyOneLinkedList* self)
 {
-    printf("Q\n");
+    // printf("Q\n");
 }
 
 static int
@@ -171,8 +200,7 @@ PyOneLinkedList_Init(PyOneLinkedList *self, PyObject *args, PyObject *kwds)
     if(!PyArg_ParseTuple(args, "|O", &resource)) {
         printf("PyArg_ParseTuple\n");
     }
-    Py_INCREF(Py_None);
-    self->first = (OneLinkedList*)Py_None;
+    self->first = NULL;
     if(resource == NULL) return 0;
 
     resource = PyObject_GetIter(resource);
@@ -180,15 +208,19 @@ PyOneLinkedList_Init(PyOneLinkedList *self, PyObject *args, PyObject *kwds)
         PyErr_SetString(PyExc_TypeError, "Object don't support the iterator protocol");
         return -1;
     }
+
     PyObject *item;
     while(item = PyIter_Next(resource)) {
-        list_push(self, item);
+        list_push(self, item); // TODO: push to end to last elem
     }
+    list_reverse(self);
     return 0;
 }
 
 
 static PyMethodDef PyOneLinkedList_Methods[] = {
+        // {"__len__", (PyCFunction)PyOneLinkedList_Len, METH_NOARGS,
+                // "Len"},
         {"get", (PyCFunction)PyOneLinkedList_Get, METH_VARARGS,
                 "Get item"},
         {"pop", (PyCFunction)PyOneLinkedList_Pop, METH_NOARGS,
@@ -199,6 +231,8 @@ static PyMethodDef PyOneLinkedList_Methods[] = {
                 "Insert item"},
         {"to_list", (PyCFunction)PyOneLinkedList_ToList, METH_NOARGS,
                 "Convert to list"},
+        {"reverse", (PyCFunction)PyOneLinkedList_Reverse, METH_NOARGS,
+                "Reverse list"},
         {NULL}
 };
 
