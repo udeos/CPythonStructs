@@ -141,7 +141,12 @@ PyOneLinkedList_ToList(PyOneLinkedList *self) {
 static PyObject*
 PyOneLinkedList_Repr(PyOneLinkedList *self) {
     PyObject *separator = PyString_FromString(", ");
-    PyObject *seq = list_to_pylist(self);
+    OneLinkedList *p = self->first;
+    PyObject *seq = PyList_New((Py_ssize_t)0);
+    while((PyObject*)p != Py_None) {
+        PyList_Append(seq, PyObject_Repr(p->item));
+        p = p->next;
+    }
     return PyUnicode_FromFormat("OneLinkedList (size: %zd) [%U]",
         list_get_size(self), PyUnicode_Join(separator, seq));
 }
